@@ -63,6 +63,10 @@ DEF_GUI_LIGHT = "default_light"
 DEF_ICONS = "material_rounded_normal"
 DEF_TREECOL = "theme"
 
+DEF_MANU_DEFAULT = "default"
+DEF_MANU_SERIF = "serif"
+DEF_MANU_SANS = "sans"
+DEF_MANU_TYPEWRITER =  "typewriter"
 
 class Config:
     """User Config.
@@ -78,6 +82,7 @@ class Config:
         "_dShortDateTime", "_dataPath", "_errData", "_hasError", "_homePath", "_lastAuthor",
         "_manuals", "_nwLangPath", "_qLocale", "_qtLangPath", "_qtTrans", "_recentPaths",
         "_recentProjects", "_splash", "allowOpenDial", "altDialogClose", "altDialogOpen",
+        "useAltQuotes",
         "appHandle", "appName", "askBeforeBackup", "askBeforeExit", "autoSaveDoc", "autoSaveProj",
         "autoScroll", "autoScrollPos", "autoSelect", "backupOnClose", "countUnit", "cursorWidth",
         "darkTheme", "dialogLine", "dialogStyle", "doJustify", "doReplace", "doReplaceDQuote",
@@ -93,7 +98,9 @@ class Config:
         "searchMatchCap", "searchNextFile", "searchProjCase", "searchProjRegEx", "searchProjWord",
         "searchRegEx", "searchWord", "showEditToolBar", "showFullPath", "showLineEndings",
         "showMultiSpaces", "showSessionTime", "showTabsNSpaces", "showViewerPanel",
-        "singleStarBold", "spellLanguage", "stopWhenIdle", "tabWidth", "textFont", "textMargin",
+        "singleStarBold", "spellLanguage", "stopWhenIdle", "tabWidth", 
+        "manuscriptLayout","manuscriptIndent",        
+        "textFont", "textMargin",
         "textWidth", "themeMode", "useCharCount", "userIdleTime", "verPyQtString", "verPyQtValue",
         "verPyString", "verQtString", "verQtValue", "viewComments", "viewNotes", "viewPanePos",
         "viewSynopsis", "vimMode", "welcomeWinSize",
@@ -207,6 +214,10 @@ class Config:
         self.textWidth       = 700      # Editor text width
         self.textMargin      = 40       # Editor/viewer text margin
         self.tabWidth        = 40       # Editor tabulator width
+        
+        self.manuscriptLayout = False   # Display Texteditor as Manuscript Layout
+        self.manuscriptIndent = 4        # Indentation in Manuscript Layout
+
         self.cursorWidth     = 1        # Editor cursor width
         self.lineHighlight   = False    # Highlight current line in editor
 
@@ -239,6 +250,7 @@ class Config:
         self.narratorDialog  = ""       # Symbol for alternating between dialogue and narrator
         self.altDialogOpen   = ""       # Alternative dialog symbol, open
         self.altDialogClose  = ""       # Alternative dialog symbol, close
+        self.useAltQuotes    = False    # Use alternative dialogue symbols for auto-replace
         self.highlightEmph   = True     # Add colour to text emphasis
         self.dottedModCodes  = False    # Add dotted lines under codes and modifiers
 
@@ -734,11 +746,14 @@ class Config:
         narratorDialog       = conf.rdStr(sec, "narratordialog", self.narratorDialog)
         self.altDialogOpen   = conf.rdStr(sec, "altdialogopen", self.altDialogOpen)
         self.altDialogClose  = conf.rdStr(sec, "altdialogclose", self.altDialogClose)
+        self.useAltQuotes    = conf.rdBool(sec, "usealtquotes", self.useAltQuotes)
         self.highlightEmph   = conf.rdBool(sec, "highlightemph", self.highlightEmph)
         self.dottedModCodes  = conf.rdBool(sec, "dottedmodcodes", self.dottedModCodes)
         self.stopWhenIdle    = conf.rdBool(sec, "stopwhenidle", self.stopWhenIdle)
         self.userIdleTime    = conf.rdInt(sec, "useridletime", self.userIdleTime)
-
+        self.manuscriptIndent = conf.rdInt(sec, "manuscriptindent", self.manuscriptIndent)  
+        self.manuscriptLayout = conf.rdBool(sec, "manuscriptlayout", self.manuscriptLayout)     
+        
         # State
         sec = "State"
         self.showViewerPanel = conf.rdBool(sec, "showviewerpanel", self.showViewerPanel)
@@ -868,10 +883,14 @@ class Config:
             "narratordialog":  str(self.narratorDialog),
             "altdialogopen":   str(self.altDialogOpen),
             "altdialogclose":  str(self.altDialogClose),
+            "useAltQuotes":    str(self.useAltQuotes),
             "highlightemph":   str(self.highlightEmph),
             "dottedmodcodes":  str(self.dottedModCodes),
             "stopwhenidle":    str(self.stopWhenIdle),
             "useridletime":    str(self.userIdleTime),
+            "manuscriptLayout": str(self.manuscriptLayout),
+            "manuscriptIndent": str(self.manuscriptIndent),
+           # "manuscrriptTypogrphy": str(self.manuscriptTypography),
         }
 
         conf["State"] = {
@@ -910,6 +929,21 @@ class Config:
     def finishStartup(self) -> None:
         """Call after startup is complete."""
         self._splash = None
+
+    def getOpenDQuotes(self) -> str:
+        """Return the opening quotes to use, depending on settings."""
+        if self.useAltQuotes:
+            return self.altDialogOpen
+        else:
+            return self.fmtDQuoteOpen
+
+    def getCloseDQuotes(self) -> str:
+        """Return the closing quotes to use, depending on settings."""
+        if self.useAltQuotes:
+            return self.altDialogClose
+        else:
+            return self.fmtDQuoteClose
+
 
     ##
     #  Internal Functions

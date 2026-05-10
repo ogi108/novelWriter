@@ -90,11 +90,20 @@ class GuiMainStatus(QStatusBar):
 
         # The Project and Session Stats
         self.statsIcon = QLabel(self)
-        self.statsText = QLabel("", self)
+        self.statsTextWords = QLabel("", self)
+        self.statsTextChars = QLabel("", self)
+        self.statsTextLines = QLabel("", self)
+        self.statsTextPages = QLabel("", self)
         self.statsIcon.setContentsMargins(0, 0, 0, 0)
-        self.statsText.setContentsMargins(0, 0, 8, 0)
+        self.statsTextWords.setContentsMargins(0, 0, 8, 0)
+        self.statsTextChars.setContentsMargins(0, 0, 8, 0)
+        self.statsTextLines.setContentsMargins(0, 0, 8, 0)
+        self.statsTextPages.setContentsMargins(0, 0, 8, 0)
         self.addPermanentWidget(self.statsIcon)
-        self.addPermanentWidget(self.statsText)
+        self.addPermanentWidget(self.statsTextWords)
+        self.addPermanentWidget(self.statsTextChars)
+        self.addPermanentWidget(self.statsTextLines)
+        self.addPermanentWidget(self.statsTextPages)
 
         # The Session Clock
         # Set the minimum width so the label doesn't rescale every second
@@ -122,12 +131,27 @@ class GuiMainStatus(QStatusBar):
 
     def initSettings(self) -> None:
         """Apply user settings."""
-        if CONFIG.useCharCount:
-            self._trStatsCount = trStats(nwLabels.STATS_DISPLAY[nwStats.CHARS])
-            self._trStatsTip = self.tr("Total character count (session change)")
-        else:
-            self._trStatsCount = trStats(nwLabels.STATS_DISPLAY[nwStats.WORDS])
-            self._trStatsTip = self.tr("Total word count (session change)")
+        #if CONFIG.useCharCount:
+        #    self._trStatsCount = trStats(nwLabels.STATS_DISPLAY[nwStats.CHARS])
+        #    self._trStatsTip = self.tr("Total character count (session change)")
+        #else:
+        #    self._trStatsCount = trStats(nwLabels.STATS_DISPLAY[nwStats.WORDS])
+        #    self._trStatsTip = self.tr("Total word count (session change)")
+        
+        self._trStatsCountChars = trStats(nwLabels.STATS_DISPLAY[nwStats.CHARS])
+        self._trStatsTipChars = self.tr("Total character count (session change)")
+    
+        self._trStatsCountWords = trStats(nwLabels.STATS_DISPLAY[nwStats.WORDS])
+        self._trStatsTipWords = self.tr("Total word count (session change)")
+
+        self._trStatsCountLines = trStats(nwLabels.STATS_DISPLAY[nwStats.LINES])
+        self._trStatsTipLines = self.tr("Total Line count (session change)")
+        
+        self._trStatsCountPages = trStats(nwLabels.STATS_DISPLAY[nwStats.PAGES])
+        self._trStatsTipPages = self.tr("Total Page count (session change)")
+
+
+
 
     def clearStatus(self) -> None:
         """Reset all widgets on the status bar to default values."""
@@ -184,8 +208,11 @@ class GuiMainStatus(QStatusBar):
 
     def setProjectStats(self, pWC: int, sWC: int) -> None:
         """Update the current project statistics."""
-        self.statsText.setText(self._trStatsCount.format(f"{pWC:n}", f"{sWC:+n}"))
-        self.statsText.setToolTip(self._trStatsTip)
+        self.statsTextWords.setText(self._trStatsCountWords.format(f"{pWC:n}", f"{sWC:+n}"))
+        self.statsTextChars.setText(self._trStatsCountChars.format(f"{pWC:n}", f"{sWC:+n}"))
+        self.statsTextLines.setText(self._trStatsCountLines.format(f"{pWC:n}", f"{sWC:+n}"))
+        self.statsTextPages.setText(self._trStatsCountPages.format(f"{pWC:n}", f"{sWC:+n}"))
+        self.statsTextWords.setToolTip(self._trStatsTipWords)
 
     def updateTime(self, idleTime: float = 0.0) -> None:
         """Update the session clock."""

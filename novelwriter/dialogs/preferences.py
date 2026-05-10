@@ -499,6 +499,25 @@ class GuiPreferences(NDialog):
             unit=self.tr("px")
         )
 
+        self.manuscriptLayout = NSwitch(self)
+        self.manuscriptLayout.setChecked(CONFIG.manuscriptLayout)
+        self.mainForm.addRow(
+            self.tr("Enable manuscript layout"), self.manuscriptLayout,
+            self.tr("Use virtual paragraph indentation in the editor.")
+        )
+
+        # Manuscript Indent Width
+        self.manuscriptIndent = NSpinBox(self, minVal=1, maxVal=16)
+
+        self.manuscriptIndent.setFixedNumbersWidth(2)
+        self.manuscriptIndent.setValue(CONFIG.manuscriptIndent)
+
+        self.mainForm.addRow(
+            self.tr("Manuscript indent width"), self.manuscriptIndent,
+            self.tr("Virtual indentation width in spaces.")
+        )
+
+
         # Text Editing
         # ============
 
@@ -763,6 +782,14 @@ class GuiPreferences(NDialog):
             self.tr("Try to guess which is an opening or a closing quote.")
         )
 
+        self.useAltQuotes = NSwitch(self)
+        self.useAltQuotes.setChecked(CONFIG.useAltQuotes)
+        self.useAltQuotes.setEnabled(CONFIG.doReplace)
+        self.mainForm.addRow(
+            self.tr("Replace with alt quotes"), self.useAltQuotes,
+            self.tr("Quote will be replaced with defined alternatives.")
+        )
+
         # Auto-Replace Hyphens
         self.doReplaceDash = NSwitch(self)
         self.doReplaceDash.setChecked(CONFIG.doReplaceDash)
@@ -981,6 +1008,7 @@ class GuiPreferences(NDialog):
         self.doReplaceDash.setEnabled(state)
         self.doReplaceDots.setEnabled(state)
         self.fmtPadThin.setEnabled(state)
+        self.useAltQuotes.setEnabled(state)
 
     @pyqtSlot()
     def _changeSingleQuoteOpen(self) -> None:
@@ -1091,7 +1119,9 @@ class GuiPreferences(NDialog):
         CONFIG.doJustify       = self.doJustify.isChecked()
         CONFIG.textMargin      = self.textMargin.value()
         CONFIG.tabWidth        = self.tabWidth.value()
-
+        CONFIG.manuscriptLayout = self.manuscriptLayout.isChecked()
+        CONFIG.manuscriptIndent = self.manuscriptIndent.value() 
+        
         # Text Editing
         scaleHeadings  = self.scaleHeadings.isChecked()
         singleStarBold = self.singleStarBold.isChecked()
@@ -1153,6 +1183,7 @@ class GuiPreferences(NDialog):
         CONFIG.doReplace       = self.doReplace.isChecked()
         CONFIG.doReplaceSQuote = self.doReplaceSQuote.isChecked()
         CONFIG.doReplaceDQuote = self.doReplaceDQuote.isChecked()
+        CONFIG.useAltQuotes = self.useAltQuotes.isChecked() 
         CONFIG.doReplaceDash   = self.doReplaceDash.isChecked()
         CONFIG.doReplaceDots   = self.doReplaceDots.isChecked()
         CONFIG.fmtPadBefore    = uniqueCompact(self.fmtPadBefore.text())

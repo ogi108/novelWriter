@@ -38,7 +38,6 @@ import logging
 
 from enum import Enum, IntFlag
 from time import time
-from typing import NamedTuple
 
 from PyQt6 import sip
 from PyQt6.QtCore import (
@@ -49,7 +48,7 @@ from PyQt6.QtGui import (
     QAction, QCursor, QDragEnterEvent, QDragMoveEvent, QDropEvent,
     QInputMethodEvent, QKeyEvent, QKeySequence, QMouseEvent, QPalette, QPixmap,
     QResizeEvent, QShortcut, QTextBlock, QTextCursor, QTextDocument,
-    QTextFormat, QTextOption
+    QTextFormat, QTextOption, QFontDatabase, QFont
 )
 from PyQt6.QtWidgets import (
     QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu,
@@ -93,9 +92,31 @@ from novelwriter.types import (
 
 logger = logging.getLogger(__name__)
 
+INDENT_BEGIN = "\u2063"
+INDENT_END   = "\u2064"
+
+INDENT_WIDTH = 4
+
+INDENT_FILL = " "
+
+def getIndentWidth(text: str) -> int:
+    end = text.find( INDENT_END )
+    return end + 1
+
+def logicalCursorPosition( cursor):
+    text = cursor.block().text()
+    pos = cursor.positionInBlock()
+    start = text.find(INDENT_BEGIN)
+    if start == -1:
+        return pos
+    end = text.find(INDENT_END, start + 1)
+    if end == -1:
+        return pos
+    if pos <= end:
+        return 0
+    return pos - (end + 1)
 
 class _SelectAction(Enum):
-
     NO_DECISION    = 0
     KEEP_SELECTION = 1
     KEEP_POSITION  = 2
@@ -103,7 +124,6 @@ class _SelectAction(Enum):
 
 
 class _TagAction(IntFlag):
-
     NONE   = 0b00
     FOLLOW = 0b01
     CREATE = 0b10
@@ -142,6 +162,13 @@ class GuiDocEditor(QPlainTextEdit):
     spellCheckStateChanged = pyqtSignal(bool)
     toggleFocusModeRequest = pyqtSignal()
 
+    def _buildIndentPrefix(self) -> str:
+        return (
+                INDENT_BEGIN
+                + (INDENT_FILL * CONFIG.manuscriptIndent)
+                + INDENT_END
+            )
+
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent=parent)
 
@@ -155,6 +182,8 @@ class GuiDocEditor(QPlainTextEdit):
         self._docHandle  = None   # The handle of the open document
         self._vpMargin   = 0      # The editor viewport margin, set during init
 
+        self.INDENT_PREFIX = self._buildIndentPrefix()
+        
         # Document Variables
         self._lastEdit   = 0.0    # Timestamp of last edit
         self._lastActive = 0.0    # Timestamp of last activity
@@ -193,7 +222,7 @@ class GuiDocEditor(QPlainTextEdit):
         # Create Custom Document
         self._qDocument = GuiTextDocument(self)
         self.setDocument(self._qDocument)
-
+                
         # Connect Editor and Document Signals
         self._qDocument.contentsChange.connect(self._docChange)
         self.selectionChanged.connect(self._updateSelectedStatus)
@@ -310,6 +339,86 @@ class GuiDocEditor(QPlainTextEdit):
     ##
     #  Methods
     ##
+    
+    def hasVirtualIndent(self,text: str) -> bool:
+        return text.startswith(self.INDENT_PREFIX)
+
+    def shouldIndent(self,prev_text: str) -> bool:
+        text = self.decodeBlock(prev_text)
+        if len(text) ==0:
+            return False
+        if text == "":
+            return False
+        if text.startswith("#"):
+            return False
+        if text.startswith("*"):
+            return False
+        if text.startswith('\\'):
+            return False
+        if text == "***":
+            return False
+        return True
+
+    def decodeBlock(self, text: str) -> str:
+        start = text.find(INDENT_BEGIN)
+        if start == -1:
+            return text
+        end = text.find(INDENT_END, start + 1)
+        if end == -1:
+            # Fallback:
+            # entferne alles ab BEGIN
+            return text[:start]
+        return text[:start] + text[end + 1:]        
+
+    def encodeBlock(self,text: str) -> str:
+        clean = self.decodeBlock(text)
+        #i = len(clean)
+        #clean = str(i) + repr(clean)
+        #return clean
+        if not CONFIG.manuscriptLayout:
+            return clean
+        if text.startswith("#"):
+            return clean
+        if text == "***":
+            return clean
+        text = self.INDENT_PREFIX + clean
+        return text
+
+    
+    def _applyVirtualIndentProjection(self):
+
+        
+        doc = self.document()
+        doc.setUndoRedoEnabled(False)
+        try:
+            block = doc.firstBlock()
+            prev_text = ""
+            while block.isValid():
+                pos = block.position()
+                text = block.text()
+                should_indent = self.shouldIndent(prev_text)
+                if should_indent:
+                    new_text = self.encodeBlock(text)
+                else:
+                    new_text = self.decodeBlock(text)
+                if new_text != text:
+                    cursor = QTextCursor(doc)
+                    cursor.setPosition(pos)
+                    cursor.movePosition(
+                        QTextCursor.MoveOperation.EndOfBlock,
+                        QTextCursor.MoveMode.KeepAnchor
+                    )
+                    cursor.insertText(new_text)
+                    block = doc.findBlock(pos)
+                prev_text = self.decodeBlock(new_text)
+                block = block.next()
+        finally:
+            doc.setUndoRedoEnabled(True)
+
+    def refreshManuscriptProjection(self):
+        self._buildIndentPrefix()
+        self._applyVirtualIndentProjection()
+        self.viewport().update()
 
     def clearEditor(self) -> None:
         """Clear the current document and reset all document-related
@@ -380,7 +489,35 @@ class GuiDocEditor(QPlainTextEdit):
         SHARED.updateSpellCheckLanguage()
 
         # Set the font. See issues #1862 and #1875.
-        font = fontMatcher(CONFIG.textFont)
+        #font = fontMatcher(CONFIG.textFont)
+
+
+        if CONFIG.manuscriptLayout:
+
+            font_id = QFontDatabase.addApplicationFont(
+                str(CONFIG.assetPath(
+                    "fonts/LibertinusManuscript-Regular.ttf"
+                ))
+            )
+
+            if font_id != -1:
+
+                families = QFontDatabase.applicationFontFamilies(font_id)
+
+                if families:
+                    font = QFont(families[0], 13)
+                else:
+                    font = fontMatcher(CONFIG.textFont)
+
+            else:
+                font = fontMatcher(CONFIG.textFont)
+
+        else:
+
+            font = fontMatcher(CONFIG.textFont)
+
+
+
         self.setFont(font)
         self._qDocument.setDefaultFont(font)
         self.docHeader.updateFont()
@@ -408,7 +545,7 @@ class GuiDocEditor(QPlainTextEdit):
         self._qDocument.setDefaultTextOption(options)
 
         # Scrolling
-        self.setCenterOnScroll(CONFIG.scrollPastEnd)
+        self.setCenterOnScroll(CONFIG.scrollPastEnd) 
         if CONFIG.hideVScroll:
             self.setVerticalScrollBarPolicy(QtScrollAlwaysOff)
         else:
@@ -434,9 +571,12 @@ class GuiDocEditor(QPlainTextEdit):
         else:
             self.clearEditor()
 
+        # Refresh Manuscript Layout Projection
+        self.refreshManuscriptProjection()
+
         # Refresh Vim Mode
         self.setVimMode(nwVimMode.NORMAL)
-
+    
     def loadText(self, tHandle: str, tLine: int | None = None) -> bool:
         """Load text from a document into the editor. If we have an I/O
         error, we must handle this and clear the editor so that we don't
@@ -462,7 +602,9 @@ class GuiDocEditor(QPlainTextEdit):
         self._docHandle = tHandle
 
         self._allowAutoReplace(False)
+  
         self._qDocument.setTextContent(text, tHandle)
+
         self._allowAutoReplace(True)
         QApplication.processEvents()
 
@@ -489,6 +631,9 @@ class GuiDocEditor(QPlainTextEdit):
             self.setCursorPosition(0)
 
         QApplication.processEvents()
+
+        self._applyVirtualIndentProjection()
+        
         self.setDocumentChanged(False)
         self._qDocument.clearUndoRedoStacks()
         self.docToolBar.setVisible(CONFIG.showEditToolBar)
@@ -511,6 +656,7 @@ class GuiDocEditor(QPlainTextEdit):
         """
         QApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
         self.setPlainText(text)
+        
         self.updateDocMargins()
         self.setDocumentChanged(True)
         QApplication.restoreOverrideCursor()
@@ -676,13 +822,14 @@ class GuiDocEditor(QPlainTextEdit):
             self._docChanged = state
             self.editedStatusChanged.emit(self._docChanged)
 
+
     def setCursorPosition(self, position: int) -> None:
         """Move the cursor to a given position in the document."""
         if (chars := self._qDocument.characterCount()) > 1 and isinstance(position, int):
             cursor = self.textCursor()
             cursor.setPosition(minmax(position, 0, chars-1))
             self.setTextCursor(cursor)
-            self.centerCursor()
+            self.centerCursor()  ###***
 
     def saveCursorPosition(self) -> None:
         """Save the cursor position to the current project item."""
@@ -796,9 +943,9 @@ class GuiDocEditor(QPlainTextEdit):
         elif action == nwDocAction.MD_MARK and not noFormat:
             self._toggleFormat(2, "=")
         elif action == nwDocAction.S_QUOTE:
-            self._wrapSelection(CONFIG.fmtSQuoteOpen, CONFIG.fmtSQuoteClose)
+            self._wrapSelection(CONFIG.fmtSQuoteOpen, CONFIG.fmtSQuoteClose )
         elif action == nwDocAction.D_QUOTE:
-            self._wrapSelection(CONFIG.fmtDQuoteOpen, CONFIG.fmtDQuoteClose)
+            self._wrapSelection( CONFIG.getOpenDQuotes(), CONFIG.getCloseDQuotes())
         elif action == nwDocAction.SEL_ALL:
             self._makeSelection(QtSelectDocument)
         elif action == nwDocAction.SEL_PARA:
@@ -824,9 +971,9 @@ class GuiDocEditor(QPlainTextEdit):
         elif action == nwDocAction.BLOCK_HSC:
             self._formatBlock(nwDocAction.BLOCK_HSC)
         elif action == nwDocAction.REPL_SNG:
-            self._replaceQuotes("'", CONFIG.fmtSQuoteOpen, CONFIG.fmtSQuoteClose)
+            self._replaceQuotes("'", CONFIG.fmtSQuoteOpen, CONFIG.fmtSQuoteClose )
         elif action == nwDocAction.REPL_DBL:
-            self._replaceQuotes('"', CONFIG.fmtDQuoteOpen, CONFIG.fmtDQuoteClose)
+            self._replaceQuotes('"', CONFIG.getOpenDQuotes(),  CONFIG.getCloseDQuotes())
         elif action == nwDocAction.RM_BREAKS:
             self._removeInParLineBreaks()
         elif action == nwDocAction.ALIGN_L and not noFormat:
@@ -908,9 +1055,9 @@ class GuiDocEditor(QPlainTextEdit):
             elif insert == nwDocInsert.QUOTE_RS:
                 text = CONFIG.fmtSQuoteClose
             elif insert == nwDocInsert.QUOTE_LD:
-                text = CONFIG.fmtDQuoteOpen
+                text = CONFIG.getOpenDQuotes()
             elif insert == nwDocInsert.QUOTE_RD:
-                text = CONFIG.fmtDQuoteClose
+                text = CONFIG.getCloseDQuotes()
             elif insert == nwDocInsert.SYNOPSIS:
                 text = "%Synopsis: "
                 block = True
@@ -996,6 +1143,45 @@ class GuiDocEditor(QPlainTextEdit):
           * We also handle automatic scrolling here.
         """
         self._lastActive = time()
+
+        
+        if CONFIG.manuscriptLayout:
+            if event.key() == Qt.Key.Key_Left:
+                cursor = self.textCursor()
+                block = cursor.block()
+                text = block.text()
+                #if self.decodeBlock(text) == "":
+                start = text.find(INDENT_BEGIN)
+                if start != -1:
+                    end = text.find(INDENT_END, start + 1)
+                    if end != -1:
+                        pos = cursor.positionInBlock()
+                        # Cursor direkt hinter virtuellem Bereich
+                        if pos > start and pos <= end + 1:
+                            prev_block = block.previous()
+                            if prev_block.isValid():
+                                cursor.setPosition(
+                                    prev_block.position()
+                                    + len(prev_block.text())
+                                )
+                                self.setTextCursor(cursor)
+                                return
+            elif event.key() == Qt.Key.Key_Return:
+                cursor = self.textCursor()
+                cursor.beginEditBlock()
+                cursor = self.textCursor()
+                super().keyPressEvent(event)
+                block = cursor.block()
+                prev_block = block.previous().text()
+                if self.shouldIndent(prev_block):                    
+                    cursor.insertText(self.INDENT_PREFIX)
+                    cursor.movePosition(QTextCursor.MoveOperation.Left, QTextCursor.MoveMode.MoveAnchor, 1)
+                    self.setTextCursor(cursor)
+                cursor.endEditBlock()
+                return
+            super().keyPressEvent(event)
+            return
+
 
         if CONFIG.vimMode and self._vim.mode != nwVimMode.INSERT:
             # Process Vim modes
@@ -1170,6 +1356,11 @@ class GuiDocEditor(QPlainTextEdit):
     #  Private Slots
     ##
 
+    def striptext(self, s):
+        
+        return s
+
+
     @pyqtSlot(int, int, int)
     def _docChange(self, pos: int, removed: int, added: int) -> None:
         """Triggered by QTextDocument->contentsChanged. This also
@@ -1206,14 +1397,35 @@ class GuiDocEditor(QPlainTextEdit):
                 if self._autoReplace.process(text, cursor):
                     self._qDocument.syntaxHighlighter.rehighlightBlock(cursor.block())
 
+        
     @pyqtSlot()
     def _cursorMoved(self) -> None:
+        
         """Triggered when the cursor moved in the editor."""
         self.docFooter.updateLineCount(self.textCursor())
         if CONFIG.lineHighlight:
             self._selection.cursor = self.textCursor()
             self._selection.cursor.clearSelection()
             self.setExtraSelections([self._selection])
+
+        if CONFIG.manuscriptLayout:
+            cursor = self.textCursor()
+            block = cursor.block()
+            text = block.text()
+            if self.decodeBlock(text)=="":
+                shift = 1
+            else:
+                shift = 1
+            start = text.find(INDENT_BEGIN)
+            if start != -1:
+                end = text.find(INDENT_END, start + 1)
+                if end != -1:
+                    pos = cursor.positionInBlock()
+                    if start <= pos <= end:
+                        cursor.setPosition(
+                            block.position() + end + shift
+                        )
+                        self.setTextCursor(cursor)
 
     @pyqtSlot(int, int, str)
     def _insertCompletion(self, pos: int, length: int, text: str) -> None:
@@ -2537,14 +2749,6 @@ class GuiDocEditor(QPlainTextEdit):
                     break
 
 
-class CompleterAction(NamedTuple):
-    """Values needed to complete a completer action."""
-
-    pos: int
-    length: int
-    value: str
-
-
 class CommandCompleter(QMenu):
     """GuiWidget: Command Completer Menu.
 
@@ -2561,10 +2765,9 @@ class CommandCompleter(QMenu):
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent=parent)
         self._parent = parent
-        self.triggered.connect(self._emitComplete)
 
     def updateMetaText(self, text: str, pos: int) -> bool:
-        """Update the menu options based on the line of meta text."""
+        """Update the menu options based on the line of text."""
         self.clear()
         kw, sep, _ = text.partition(":")
         if pos <= len(kw):
@@ -2593,12 +2796,12 @@ class CommandCompleter(QMenu):
         for value in options:
             rep = value + suffix
             action = qtAddAction(self, value)
-            action.setData(CompleterAction(pos=offset, length=length, value=rep))
+            action.triggered.connect(qtLambda(self._emitComplete, offset, length, rep))
 
         return True
 
     def updateCommentText(self, text: str, pos: int) -> bool:
-        """Update the menu options based on the line of comment text."""
+        """Update the menu options based on the line of text."""
         self.clear()
         cmd, sep, _ = text.partition(":")
         if pos <= len(cmd):
@@ -2636,7 +2839,7 @@ class CommandCompleter(QMenu):
                 for value in options:
                     rep = value + suffix
                     action = qtAddAction(self, rep.rstrip(":. "))
-                    action.setData(CompleterAction(pos=offset, length=length, value=rep))
+                    action.triggered.connect(qtLambda(self._emitComplete, offset, length, rep))
                 return True
 
         return False
@@ -2647,37 +2850,22 @@ class CommandCompleter(QMenu):
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Capture keypresses and forward most of them to the editor."""
-        match event.key():
-            case Qt.Key.Key_Up | Qt.Key.Key_Down:
-                # Let the menu handle navigation
-                super().keyPressEvent(event)
-            case Qt.Key.Key_Right | Qt.Key.Key_Return | Qt.Key.Key_Enter | Qt.Key.Key_Tab:
-                # Activate the selection if there is one, otherwise close the completer
-                if action := self.activeAction():
-                    action.trigger()
-                else:
-                    self.clear()
-                    self.close()
-            case Qt.Key.Key_Left | Qt.Key.Key_Escape:
-                # Cancel the completer
-                self.clear()
-                self.close()
-            case _:
-                # Any other keys, send back to the editor
-                # Also close to release the event lock before forwarding key press (#2510)
-                self.clear()
-                self.close()
-                self._parent.keyPressEvent(event)
+        if event.key() in (
+            Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Return,
+            Qt.Key.Key_Enter, Qt.Key.Key_Escape
+        ):
+            super().keyPressEvent(event)
+        else:
+            self.close()  # Close to release the event lock before forwarding the key press (#2510)
+            self._parent.keyPressEvent(event)
 
     ##
-    #  Internal Slots
+    #  Internal Functions
     ##
 
-    @pyqtSlot(QAction)
-    def _emitComplete(self, action: QAction) -> None:
+    def _emitComplete(self, pos: int, length: int, value: str) -> None:
         """Emit the signal to indicate a selection has been made."""
-        if isinstance(data := action.data(), CompleterAction):
-            self.insertText.emit(data.pos, data.length, data.value)
+        self.insertText.emit(pos, length, value)
 
 
 class BackgroundWordCounter(QRunnable):
@@ -2738,8 +2926,8 @@ class TextAutoReplace:
         """Initialise the auto-replace settings from config."""
         self._quoteSO = CONFIG.fmtSQuoteOpen
         self._quoteSC = CONFIG.fmtSQuoteClose
-        self._quoteDO = CONFIG.fmtDQuoteOpen
-        self._quoteDC = CONFIG.fmtDQuoteClose
+        self._quoteDO = CONFIG.getOpenDQuotes()
+        self._quoteDC = CONFIG.getCloseDQuotes()
 
         self._replaceSQuote = CONFIG.doReplaceSQuote
         self._replaceDQuote = CONFIG.doReplaceDQuote
@@ -2757,15 +2945,17 @@ class TextAutoReplace:
         Returns True if anything was changed.
         """
         aPos = cursor.position()
-        bPos = cursor.positionInBlock()
+        bPos = cursor.positionInBlock()        
         block = cursor.block()
+        w = getIndentWidth(block.text())
         length = block.length() - 1
         if length < 1 or bPos-1 > length:
             return False
 
         cursor.movePosition(QtMoveLeft, QtKeepAnchor, min(4, bPos))
         last = cursor.selectedText()
-        delete, insert = self._determine(last, bPos)
+        
+        delete, insert = self._determine(last, bPos-w)
 
         check = insert
         if self._doPadBefore and check and check in self._padBefore:
@@ -2792,12 +2982,14 @@ class TextAutoReplace:
 
     def _determine(self, text: str, pos: int) -> tuple[int, str]:
         """Determine what to replace, if anything."""
+        
         t1 = text[-1:]
         t2 = text[-2:]
         t3 = text[-3:]
         t4 = text[-4:]
-
-        if self._replaceDQuote and t1 == '"':
+        # align poisition for Manuscript Layout
+       
+        if self._replaceDQuote and t1 == '"':            
             # Process Double Quote
             if pos == 1:
                 return 1, self._quoteDO
@@ -3576,7 +3768,7 @@ class GuiDocEditFooter(QWidget):
         fPx = int(0.9*SHARED.theme.fontPixelSize)
 
         # Cached Translations
-        self.initSettings()
+        self.initSettings()        
         self._trLineCount = self.tr("Line: {0} ({1})")
         self._trSelectCount = self.tr("Selected: {0}")
 

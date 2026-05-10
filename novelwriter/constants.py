@@ -244,6 +244,8 @@ class nwStats:
     WORDS        = "allWords"
     WORDS_TEXT   = "textWords"
     WORDS_TITLE  = "titleWords"
+    PAGES     = "pageCount"
+    LINES     = "lineCount"
 
     # Note: The order here affects the order of menu entries
     ALL_FIELDS: Final[list[str]] = [
@@ -367,10 +369,14 @@ class nwLabels:
         nwStats.WORDS:        QT_TRANSLATE_NOOP("Stats", "Words"),
         nwStats.WORDS_TEXT:   QT_TRANSLATE_NOOP("Stats", "Words in text"),
         nwStats.WORDS_TITLE:  QT_TRANSLATE_NOOP("Stats", "Words in headings"),
+        nwStats.LINES:  QT_TRANSLATE_NOOP("Stats", "Lines in Project"),
+        nwStats.PAGES:  QT_TRANSLATE_NOOP("Stats", "Standard-Pages in Project"),
     }
     STATS_DISPLAY: Final[dict[str, str]] = {
         nwStats.CHARS: QT_TRANSLATE_NOOP("Stats", "Characters: {0} ({1})"),
         nwStats.WORDS: QT_TRANSLATE_NOOP("Stats", "Words: {0} ({1})"),
+        nwStats.LINES: QT_TRANSLATE_NOOP("Stats", "Lines: {0} ({1})"),
+        nwStats.PAGES: QT_TRANSLATE_NOOP("Stats", "Pages: {0} ({1})"),
     }
     BUILD_FMT: Final[dict[nwBuildFmt, str]] = {
         nwBuildFmt.ODT:    QT_TRANSLATE_NOOP("Constant", "Open Document (.odt)"),

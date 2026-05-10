@@ -55,7 +55,7 @@ class NWItem:
     __slots__ = (
         "_active", "_charCount", "_charInit", "_class", "_cursorPos",
         "_expanded", "_handle", "_heading", "_import", "_layout", "_name",
-        "_order", "_paraCount", "_parent", "_project", "_root", "_status",
+        "_order", "_paraCount", "_lineCount", "_pageCount", "_parent", "_project", "_root", "_status",
         "_type", "_wordCount", "_wordInit",
     )
 
@@ -80,9 +80,11 @@ class NWItem:
         self._charCount = 0     # Current character count
         self._wordCount = 0     # Current word count
         self._paraCount = 0     # Current paragraph count
+        self._lineCount = 0     # Current line count
+        self._pageCount = 0     # Current page count
         self._cursorPos = 0     # Last cursor position
-        self._wordInit  = 0     # Initial character count
-        self._charInit  = 0     # Initial word count
+        self._wordInit  = 0     # Initial word count
+        self._charInit  = 0     # Initial character count
 
     def __repr__(self) -> str:
         return f"<NWItem handle={self._handle}, parent={self._parent}, name='{self._name}'>"
@@ -162,6 +164,14 @@ class NWItem:
     @property
     def paraCount(self) -> int:
         return self._paraCount
+
+    @property
+    def lineCount(self) -> int:
+        return self._lineCount
+
+    @property
+    def pageCount(self) -> int:
+        return self._pageCount
 
     @property
     def mainCount(self) -> int:
@@ -256,6 +266,8 @@ class NWItem:
             self._charCount = 0
             self._wordCount = 0
             self._paraCount = 0
+            self._lineCount = 0
+            self._pageCount = 0
             self._cursorPos = 0
 
         self._wordInit = self._charCount
@@ -282,6 +294,8 @@ class NWItem:
         new._charCount  = source._charCount
         new._wordCount  = source._wordCount
         new._paraCount  = source._paraCount
+        new._lineCount  = source._lineCount
+        new._pageCount  = source._pageCount
         new._cursorPos  = source._cursorPos
         new._wordInit = source._wordInit
         new._charInit = source._charInit
@@ -578,6 +592,20 @@ class NWItem:
             self._paraCount = max(0, count)
         else:
             self._paraCount = 0
+
+    def setLineCount(self, count: Any) -> None:
+        """Set the line count, and ensure that it is an integer."""
+        if isinstance(count, int):
+            self._lineCount = max(0, count)
+        else:
+            self._lineCount = 0
+        
+    def setPageCount(self, count: Any) -> None:
+        """Set the page count, and ensure that it is an integer."""
+        if isinstance(count, int):
+            self._pageCount = max(0, count)
+        else:
+            self._pageCount = 0
 
     def setCursorPos(self, position: Any) -> None:
         """Set the cursor position, and ensure that it is an integer."""
