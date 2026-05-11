@@ -14,6 +14,25 @@ for comments, synopsis, and cross-referencing. It's designed to be a simple text
 for easy organisation of text and notes, using human readable text files as storage for robustness.
 The project format is well suited both for version control software and file synchronisation tools.
 
+
+## Experimental Manuscript Mode 
+Fork by ogi108
+
+This fork experiments with a semantic manuscript projection layer for novelWriter while preserving
+its plain text and Markdown-oriented workflow.
+
+Current experiments include:
+
+* Virtual first-line paragraph indentation
+* Manuscript-oriented typography modes
+* Semantic manuscript page estimation
+* Optional manuscript page navigation markers
+* Extended manuscript statistics and counters
+
+The goal is to improve long-form writing ergonomics without introducing a rich text document model
+or changing the underlying plain text storage format.
+
+
 For more details, and how to install and use novelWriter, please see the main website and
 documentation.
 
