@@ -99,7 +99,7 @@ class Config:
         "searchRegEx", "searchWord", "showEditToolBar", "showFullPath", "showLineEndings",
         "showMultiSpaces", "showSessionTime", "showTabsNSpaces", "showViewerPanel",
         "singleStarBold", "spellLanguage", "stopWhenIdle", "tabWidth", 
-        "manuscriptLayout","manuscriptIndent",        
+        "manuscriptLayout","manuscriptIndent", "manuscriptCharsPerLine",  "manuscriptLinesPerPage", "manuscriptFont",
         "textFont", "textMargin",
         "textWidth", "themeMode", "useCharCount", "userIdleTime", "verPyQtString", "verPyQtValue",
         "verPyString", "verQtString", "verQtValue", "viewComments", "viewNotes", "viewPanePos",
@@ -217,6 +217,9 @@ class Config:
         
         self.manuscriptLayout = False   # Display Texteditor as Manuscript Layout
         self.manuscriptIndent = 4        # Indentation in Manuscript Layout
+        self.manuscriptCharsPerLine = 60  # Characters per line in Manuscript Layout
+        self.manuscriptLinesPerPage = 80     # Lines per page in Manuscript Layout
+        self.manuscriptFont = 1  # Font for Manuscript Layout
 
         self.cursorWidth     = 1        # Editor cursor width
         self.lineHighlight   = False    # Highlight current line in editor
@@ -752,8 +755,11 @@ class Config:
         self.stopWhenIdle    = conf.rdBool(sec, "stopwhenidle", self.stopWhenIdle)
         self.userIdleTime    = conf.rdInt(sec, "useridletime", self.userIdleTime)
         self.manuscriptIndent = conf.rdInt(sec, "manuscriptindent", self.manuscriptIndent)  
-        self.manuscriptLayout = conf.rdBool(sec, "manuscriptlayout", self.manuscriptLayout)     
-        
+        self.manuscriptLayout = conf.rdBool(sec, "manuscriptlayout", self.manuscriptLayout)             
+        self.manuscriptCharsPerLine = conf.rdInt(sec, "manuscriptcharsperline", self.manuscriptCharsPerLine)
+        self.manuscriptLinesPerPage = conf.rdInt(sec, "manuscriptlinesperpage", self.manuscriptLinesPerPage)
+        self.manuscriptFont = conf.rdInt(sec, "manuscriptfont", self.manuscriptFont)    
+
         # State
         sec = "State"
         self.showViewerPanel = conf.rdBool(sec, "showviewerpanel", self.showViewerPanel)
@@ -890,7 +896,9 @@ class Config:
             "useridletime":    str(self.userIdleTime),
             "manuscriptLayout": str(self.manuscriptLayout),
             "manuscriptIndent": str(self.manuscriptIndent),
-           # "manuscrriptTypogrphy": str(self.manuscriptTypography),
+            "manuscriptcharsperline": str(self.manuscriptCharsPerLine),
+            "manuscriptlinesperpage": str(self.manuscriptLinesPerPage),
+            "manuscriptfont": str(self.manuscriptFont),            
         }
 
         conf["State"] = {

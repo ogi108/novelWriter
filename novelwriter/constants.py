@@ -29,7 +29,7 @@ from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication
 
 from novelwriter.enum import (
     nwBuildFmt, nwComment, nwItemClass, nwItemLayout, nwOutline, nwStatusShape,
-    nwTheme
+    nwTheme, nwManuscriptFontStyle
 )
 
 
@@ -146,6 +146,12 @@ class nwStyles:
         "FT": (1.40, 0.40),  # Footnote margins (left, bottom)
     }
 
+class nwManuscriptFont:
+   CLASS_NAME: Final[dict[nwManuscriptFontStyle, str]] = {
+        nwManuscriptFontStyle.SERIF : "Serif",
+        nwManuscriptFontStyle.SANS : "Sans Serif",
+        nwManuscriptFontStyle.TYPEWRITER : "Typewriter / Monospace"
+   }
 
 class nwFiles:
     """novelWriter Files."""

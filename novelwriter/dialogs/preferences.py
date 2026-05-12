@@ -36,9 +36,9 @@ from PyQt6.QtWidgets import (
 from novelwriter import CONFIG, SHARED
 from novelwriter.common import compact, describeFont, processDialogSymbols, uniqueCompact
 from novelwriter.config import DEF_GUI_DARK, DEF_GUI_LIGHT, DEF_ICONS, DEF_TREECOL
-from novelwriter.constants import nwLabels, nwQuotes, nwUnicode, trConst
+from novelwriter.constants import nwLabels, nwManuscriptFont, nwQuotes, nwUnicode, trConst
 from novelwriter.dialogs.quotes import GuiQuoteSelect
-from novelwriter.enum import nwStandardButton
+from novelwriter.enum import nwManuscriptFontStyle, nwStandardButton
 from novelwriter.extensions.configlayout import NColorLabel, NScrollableForm
 from novelwriter.extensions.modified import (
     NComboBox, NDialog, NDoubleSpinBox, NIconToolButton, NSpinBox
@@ -499,6 +499,14 @@ class GuiPreferences(NDialog):
             unit=self.tr("px")
         )
 
+
+        # Manuscript Layout
+        # =========
+        title = self.tr("Manuscript Layout")
+        section += 1
+        self.sidebar.addButton(title, section)
+        self.mainForm.addGroupLabel(title, section)
+
         self.manuscriptLayout = NSwitch(self)
         self.manuscriptLayout.setChecked(CONFIG.manuscriptLayout)
         self.mainForm.addRow(
@@ -514,9 +522,42 @@ class GuiPreferences(NDialog):
 
         self.mainForm.addRow(
             self.tr("Manuscript indent width"), self.manuscriptIndent,
-            self.tr("Virtual indentation width in spaces.")
+            self.tr("Paragraph indentation width in spaces.")
         )
 
+        # Spell Checking
+        self.manuscriptFont = NComboBox(self)
+        self.manuscriptFont.setMinimumWidth(200)
+        for id,font in nwManuscriptFont.CLASS_NAME.items():
+            self.manuscriptFont.addItem(font,id)        
+
+        self.mainForm.addRow(
+            self.tr("Manuscript text style"), self.manuscriptFont,
+            self.tr("Font Style for Manuscript Layout.")
+        )
+        self.manuscriptFont.setCurrentData(CONFIG.manuscriptFont, nwManuscriptFontStyle.SERIF)
+        
+        # Manuscript Line Width
+        self.manuscriptLinewidth = NSpinBox(self, minVal=40, maxVal=100)
+
+        self.manuscriptLinewidth.setFixedNumbersWidth(3)
+        self.manuscriptLinewidth.setValue(60)
+
+        self.mainForm.addRow(
+            self.tr("Manuscript line width"), self.manuscriptLinewidth,
+            self.tr("Characters per standard line.")
+        )
+
+        # Manuscript Page Height in Lines
+        self.manuscriptPageHeight = NSpinBox(self, minVal=50, maxVal=200)
+
+        self.manuscriptPageHeight.setFixedNumbersWidth(3)
+        self.manuscriptPageHeight.setValue(20)
+
+        self.mainForm.addRow(
+            self.tr("Manuscript page height"), self.manuscriptPageHeight,
+            self.tr("Lines per standard page.")
+        )
 
         # Text Editing
         # ============
@@ -1121,7 +1162,7 @@ class GuiPreferences(NDialog):
         CONFIG.tabWidth        = self.tabWidth.value()
         CONFIG.manuscriptLayout = self.manuscriptLayout.isChecked()
         CONFIG.manuscriptIndent = self.manuscriptIndent.value() 
-        
+        CONFIG.manuscriptFont = self.manuscriptFont.currentData()
         # Text Editing
         scaleHeadings  = self.scaleHeadings.isChecked()
         singleStarBold = self.singleStarBold.isChecked()

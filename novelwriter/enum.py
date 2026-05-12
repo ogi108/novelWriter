@@ -301,3 +301,12 @@ class nwState(Enum):
     NORMAL   = 0
     INACTIVE = 1
     ERROR    = 2
+
+
+class nwManuscriptFontStyle(Enum):
+    """Enum: Font style in Manuscript Layout Mode."""
+    
+    SERIF = 0
+    SANS = 1
+    TYPEWRITER = 2
+

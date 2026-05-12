@@ -68,7 +68,7 @@ from novelwriter.core.document import NWDocument
 from novelwriter.dialogs.editlabel import GuiEditLabel
 from novelwriter.enum import (
     nwChange, nwComment, nwDocAction, nwDocInsert, nwDocMode, nwItemClass,
-    nwItemType, nwState, nwVimMode
+    nwItemType, nwState, nwVimMode, nwManuscriptFontStyle
 )
 from novelwriter.extensions.configlayout import NPathColorLabel
 from novelwriter.extensions.eventfilters import WheelEventFilter
@@ -92,12 +92,16 @@ from novelwriter.types import (
 
 logger = logging.getLogger(__name__)
 
-INDENT_BEGIN = "\u2063"
-INDENT_END   = "\u2064"
+INDENT_BEGIN = "["  #]"\u2063"
+INDENT_END   =  "]" #"\u2064"
 
 INDENT_WIDTH = 4
 
-INDENT_FILL = " "
+INDENT_FILL = ":"
+
+FONT_MANUSCRIPT_SERIF =  "fonts/LibertinusManuscript-Regular.ttf"
+FONT_MANUSCRIPT_SANS =  "fonts/NotoSansManuscript-Regular.ttf"
+FONT_MANUSCRIPT_COURIER =  "fonts/CourierManuscript-Regular.ttf"
 
 def getIndentWidth(text: str) -> int:
     end = text.find( INDENT_END )
@@ -115,6 +119,22 @@ def logicalCursorPosition( cursor):
     if pos <= end:
         return 0
     return pos - (end + 1)
+
+def isCursorAtLineEnd(cursor:QTextCursor) -> bool:
+    if cursor.block().isValid:
+        return cursor.positionInBlock() == len(cursor.block().text())
+    else:
+        return False
+
+def isCursorAtIndentBoundary(cursor: QTextCursor) -> bool:
+    text = cursor.block().text()
+    start = text.find(INDENT_BEGIN)
+    if start == -1:
+        return False
+    end = text.find(INDENT_END, start + 1)
+    if end == -1:
+        return False
+    return cursor.positionInBlock() <= end + 1
 
 class _SelectAction(Enum):
     NO_DECISION    = 0
@@ -343,23 +363,25 @@ class GuiDocEditor(QPlainTextEdit):
     def hasVirtualIndent(self,text: str) -> bool:
         return text.startswith(self.INDENT_PREFIX)
 
-    def shouldIndent(self,prev_text: str) -> bool:
-        text = self.decodeBlock(prev_text)
-        if len(text) ==0:
+    def shouldIndent(self,prev_text: str,text : str = "") -> bool:
+        ptext = self.decodeText(prev_text)
+        if len(text) > 1 and text[0] == '#':
             return False
-        if text == "":
+        if len(ptext) ==0:
             return False
-        if text.startswith("#"):
+        if ptext == "":
             return False
-        if text.startswith("*"):
+        if ptext.startswith("#"):
             return False
-        if text.startswith('\\'):
+        if ptext.startswith("*"):
             return False
-        if text == "***":
+        if ptext.startswith('\\'):
+            return False
+        if ptext == "***":
             return False
         return True
 
-    def decodeBlock(self, text: str) -> str:
+    def decodeText(self, text: str) -> str:
         start = text.find(INDENT_BEGIN)
         if start == -1:
             return text
@@ -370,8 +392,8 @@ class GuiDocEditor(QPlainTextEdit):
             return text[:start]
         return text[:start] + text[end + 1:]        
 
-    def encodeBlock(self,text: str) -> str:
-        clean = self.decodeBlock(text)
+    def encodeText(self,text: str) -> str:
+        clean = self.decodeText(text)        
         #i = len(clean)
         #clean = str(i) + repr(clean)
         #return clean
@@ -380,14 +402,40 @@ class GuiDocEditor(QPlainTextEdit):
         if text.startswith("#"):
             return clean
         if text == "***":
-            return clean
+            return clean        
         text = self.INDENT_PREFIX + clean
         return text
 
-    
-    def _applyVirtualIndentProjection(self):
+    def decodeBlock(self, block):
+        doc = self.document()
+        text = block.text()
+        pos = block.position()
+        new_text = self.decodeText(text)
+        cursor = QTextCursor(doc)
+        if new_text != text:
+            cursor.setPosition(pos)
+            cursor.movePosition(
+                QTextCursor.MoveOperation.EndOfBlock,
+                QTextCursor.MoveMode.KeepAnchor
+            )
+            cursor.insertText(new_text)   
 
-        
+    def encodeBlock(self, block):
+        doc = self.document()
+        text = block.text()
+        pos = block.position()
+        new_text = self.encodeText(text)
+        cursor = QTextCursor(doc)
+        if new_text != text:
+            cursor.setPosition(pos)
+            cursor.movePosition(
+                QTextCursor.MoveOperation.EndOfBlock,
+                QTextCursor.MoveMode.KeepAnchor
+            )
+            cursor.insertText(new_text)   
+
+
+    def _applyVirtualIndentProjection(self):        
         doc = self.document()
         doc.setUndoRedoEnabled(False)
         try:
@@ -396,11 +444,11 @@ class GuiDocEditor(QPlainTextEdit):
             while block.isValid():
                 pos = block.position()
                 text = block.text()
-                should_indent = self.shouldIndent(prev_text)
+                should_indent = self.shouldIndent(prev_text,text=text)
                 if should_indent:
-                    new_text = self.encodeBlock(text)
+                    new_text = self.encodeText(text)
                 else:
-                    new_text = self.decodeBlock(text)
+                    new_text = self.decodeText(text)
                 if new_text != text:
                     cursor = QTextCursor(doc)
                     cursor.setPosition(pos)
@@ -410,7 +458,7 @@ class GuiDocEditor(QPlainTextEdit):
                     )
                     cursor.insertText(new_text)
                     block = doc.findBlock(pos)
-                prev_text = self.decodeBlock(new_text)
+                prev_text = self.decodeText(new_text)
                 block = block.next()
         finally:
             doc.setUndoRedoEnabled(True)
@@ -494,9 +542,15 @@ class GuiDocEditor(QPlainTextEdit):
 
         if CONFIG.manuscriptLayout:
 
+            fontpath = FONT_MANUSCRIPT_SERIF
+            if CONFIG.manuscriptFont == nwManuscriptFontStyle.SANS:
+                fontpath = FONT_MANUSCRIPT_SANS
+            elif CONFIG.manuscriptFont == nwManuscriptFontStyle.TYPEWRITER:
+                fontpath = FONT_MANUSCRIPT_COURIER
+
             font_id = QFontDatabase.addApplicationFont(
                 str(CONFIG.assetPath(
-                    "fonts/LibertinusManuscript-Regular.ttf"
+                    fontpath
                 ))
             )
 
@@ -1172,13 +1226,101 @@ class GuiDocEditor(QPlainTextEdit):
                 cursor = self.textCursor()
                 super().keyPressEvent(event)
                 block = cursor.block()
-                prev_block = block.previous().text()
-                if self.shouldIndent(prev_block):                    
-                    cursor.insertText(self.INDENT_PREFIX)
-                    cursor.movePosition(QTextCursor.MoveOperation.Left, QTextCursor.MoveMode.MoveAnchor, 1)
-                    self.setTextCursor(cursor)
+                text = block.text()
+                prev_block = block.previous()
+                if prev_block.isValid():
+                    prev_text = prev_block.text()
+                    if self.shouldIndent(prev_text,text=text): 
+                        self.encodeBlock(block)
+                    else:
+                        self.decodeBlock(block)                
+                next_block = block.next()
+                next_text = next_block.text()
+                if next_block.isValid():
+                    text = block.text()                    
+                    if self.shouldIndent(text,text=next_text): 
+                        self.encodeBlock(next_block)
+                    else:
+                        self.decodeBlock(next_block)
                 cursor.endEditBlock()
                 return
+            elif event.key() == Qt.Key.Key_Backspace:
+                if isCursorAtIndentBoundary(self.textCursor()):
+                    cursor = self.textCursor()
+                    cursor.beginEditBlock()
+                    block = cursor.block()                     
+                    # cursor at start of block, before indent
+                    pos = cursor.block().position()-1                                        
+                    # mark range of indent plus character before (linefeed to be deleted)
+                    cursor.setPosition(
+                        pos,
+                        QTextCursor.MoveMode.KeepAnchor
+                    )
+                    # insert empty string override marked range, so deletes indent plus linefeed 
+                    cursor.insertText("")
+                    cursor.clearSelection()                    
+                    pos = cursor.position()
+                    # re-read block after edit, old block isn't valid anymore 
+                    block = cursor.block()
+                    # check indentation status of previous and next block, adjust current block accordingly
+                    # next block
+                    text = block.text()
+                    prev_block = cursor.block().previous()
+                    if prev_block.isValid():
+                        prev_text = prev_block.text()                        
+                        if self.shouldIndent(prev_text, text=text):
+                            self.encodeBlock(block)
+                        else:
+                            self.decodeBlock(block)
+                    # current block
+                    text = cursor.block().text()
+                    next_block = cursor.block().next()
+                    next_text = next_block.text()                                    
+                    if next_block.isValid():
+                        if self.shouldIndent(text,text=next_text):
+                            self.encodeBlock(next_block)
+                        else:
+                            self.decodeBlock(next_block)
+                            
+                    cursor.endEditBlock()                    
+                    #cursor.setPosition(pos,QTextCursor.MoveMode.MoveAnchor)
+
+                    return                  
+            elif event.key() == Qt.Key.Key_Delete:                
+                cursor = self.textCursor()
+                #cursor.insertText("!")
+                #return
+                if isCursorAtLineEnd(cursor):                    
+                    block = cursor.block()                    
+                    next_block = block.next()
+                    if next_block.isValid():
+                        cursor.beginEditBlock()
+                        next_text = next_block.text()
+                        w = getIndentWidth(next_text)
+                        #oldpos = cursor.position()
+                        pos = next_block.position() + w
+                        # mark range of indent plus character before (linefeed to be deleted)
+                        cursor.setPosition(
+                            pos,
+                            QTextCursor.MoveMode.KeepAnchor
+                        )
+                        cursor.insertText("")
+                        cursor.clearSelection()                                            
+                        # re-read block after edit, old block isn't valid anymore 
+                        block = cursor.block()
+
+                        text = cursor.block().text()
+                        next_block = cursor.block().next()
+                        next_text = next_block.text()                                     
+                        if next_block.isValid():
+                            if self.shouldIndent(text,text=next_text):
+                                self.encodeBlock(next_block)
+                            else:
+                                self.decodeBlock(next_block)
+                        cursor.endEditBlock()
+                        return
+                    else:                        
+                        return # nothing to delete => last block                
             super().keyPressEvent(event)
             return
 
@@ -1411,11 +1553,7 @@ class GuiDocEditor(QPlainTextEdit):
         if CONFIG.manuscriptLayout:
             cursor = self.textCursor()
             block = cursor.block()
-            text = block.text()
-            if self.decodeBlock(text)=="":
-                shift = 1
-            else:
-                shift = 1
+            text = block.text()            
             start = text.find(INDENT_BEGIN)
             if start != -1:
                 end = text.find(INDENT_END, start + 1)
@@ -1423,7 +1561,7 @@ class GuiDocEditor(QPlainTextEdit):
                     pos = cursor.positionInBlock()
                     if start <= pos <= end:
                         cursor.setPosition(
-                            block.position() + end + shift
+                            block.position() + end + 1
                         )
                         self.setTextCursor(cursor)
 
