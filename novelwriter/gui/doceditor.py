@@ -92,12 +92,12 @@ from novelwriter.types import (
 
 logger = logging.getLogger(__name__)
 
-INDENT_BEGIN = "["  #]"\u2063"
-INDENT_END   =  "]" #"\u2064"
+INDENT_BEGIN =  "\u2063"
+INDENT_END   =  "\u2064"
 
 INDENT_WIDTH = 4
 
-INDENT_FILL = ":"
+INDENT_FILL = " "
 
 FONT_MANUSCRIPT_SERIF =  "fonts/LibertinusManuscript-Regular.ttf"
 FONT_MANUSCRIPT_SANS =  "fonts/NotoSansManuscript-Regular.ttf"
