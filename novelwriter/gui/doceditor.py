@@ -92,12 +92,12 @@ from novelwriter.types import (
 
 logger = logging.getLogger(__name__)
 
-INDENT_BEGIN =  "\u2063"
-INDENT_END   =  "\u2064"
+INDENT_BEGIN =  "["  # \u2063"
+INDENT_END   =  "]" # "\u2064"
 
 INDENT_WIDTH = 4
 
-INDENT_FILL = " "
+INDENT_FILL = "x"
 
 FONT_MANUSCRIPT_SERIF =  "fonts/LibertinusManuscript-Regular.ttf"
 FONT_MANUSCRIPT_SANS =  "fonts/NotoSansManuscript-Regular.ttf"
@@ -181,6 +181,18 @@ class GuiDocEditor(QPlainTextEdit):
     requestProjectItemSelected = pyqtSignal(str, bool)
     spellCheckStateChanged = pyqtSignal(bool)
     toggleFocusModeRequest = pyqtSignal()
+
+
+    def isNovelMode(self):
+        if self._nwItem is not None:
+            return self._nwItem.itemClass == nwItemClass.NOVEL and self._nwItem.isDocumentLayout()
+        return False    
+
+    def isManuscriptLayout(self):
+        return CONFIG.manuscriptLayout
+
+    def isManuscriptMode(self)->bool:        
+        return  self.isNovelMode() and self.isManuscriptLayout()        
 
     def _buildIndentPrefix(self) -> str:
         return (
@@ -397,8 +409,8 @@ class GuiDocEditor(QPlainTextEdit):
         #i = len(clean)
         #clean = str(i) + repr(clean)
         #return clean
-        if not CONFIG.manuscriptLayout:
-            return clean
+        #if not self.isManuscriptMode:
+        #    return clean
         if text.startswith("#"):
             return clean
         if text == "***":
@@ -437,6 +449,8 @@ class GuiDocEditor(QPlainTextEdit):
 
     def _applyVirtualIndentProjection(self):        
         doc = self.document()
+        if doc is None:
+            return
         doc.setUndoRedoEnabled(False)
         try:
             block = doc.firstBlock()
@@ -444,7 +458,7 @@ class GuiDocEditor(QPlainTextEdit):
             while block.isValid():
                 pos = block.position()
                 text = block.text()
-                should_indent = self.shouldIndent(prev_text,text=text)
+                should_indent = self.isManuscriptMode() and self.shouldIndent(prev_text,text=text) 
                 if should_indent:
                     new_text = self.encodeText(text)
                 else:
@@ -465,8 +479,10 @@ class GuiDocEditor(QPlainTextEdit):
 
     def refreshManuscriptProjection(self):
         self._buildIndentPrefix()
-        self._applyVirtualIndentProjection()
-        self.viewport().update()
+        self._applyVirtualIndentProjection()        
+        if self.viewport() is None:
+            return
+        self.viewport().update() # type: ignore
 
     def clearEditor(self) -> None:
         """Clear the current document and reset all document-related
@@ -540,34 +556,34 @@ class GuiDocEditor(QPlainTextEdit):
         #font = fontMatcher(CONFIG.textFont)
 
 
-        if CONFIG.manuscriptLayout:
-
+        if self.isManuscriptMode():
+            # set Manuscriptfont.
+            # Explicit mansucriofonts which includes 1.5 Linefeed as attribute in the TTF
+            # for manuscript layout, otherwise we have to rely on the user having a font 
+            # with the correct attributes installed, which is not ideal. 
+            # There are 3 fonts included with novelWriter that have these attributes,
+            # so there are only "serf" "sans serif" and "monospaced as options. 
+            # If the font cannot be loaded for some reason, we fall back to the user-selected text font.
+            # This is just cosmetic. 
             fontpath = FONT_MANUSCRIPT_SERIF
             if CONFIG.manuscriptFont == nwManuscriptFontStyle.SANS:
                 fontpath = FONT_MANUSCRIPT_SANS
             elif CONFIG.manuscriptFont == nwManuscriptFontStyle.TYPEWRITER:
                 fontpath = FONT_MANUSCRIPT_COURIER
-
             font_id = QFontDatabase.addApplicationFont(
                 str(CONFIG.assetPath(
                     fontpath
                 ))
             )
-
             if font_id != -1:
-
                 families = QFontDatabase.applicationFontFamilies(font_id)
-
                 if families:
                     font = QFont(families[0], 13)
                 else:
                     font = fontMatcher(CONFIG.textFont)
-
             else:
                 font = fontMatcher(CONFIG.textFont)
-
         else:
-
             font = fontMatcher(CONFIG.textFont)
 
 
@@ -626,7 +642,8 @@ class GuiDocEditor(QPlainTextEdit):
             self.clearEditor()
 
         # Refresh Manuscript Layout Projection
-        self.refreshManuscriptProjection()
+        if self.isNovelMode():
+            self.refreshManuscriptProjection()
 
         # Refresh Vim Mode
         self.setVimMode(nwVimMode.NORMAL)
@@ -640,13 +657,17 @@ class GuiDocEditor(QPlainTextEdit):
         document is new (empty string), we set up the editor for editing
         the file.
         """
-        self._nwDocument = SHARED.project.storage.getDocument(tHandle)
-        self._nwItem = self._nwDocument.nwItem
+        document = SHARED.project.storage.getDocument(tHandle)
+        nwItem = document.nwItem
+        self._nwItem = nwItem
+        self.initEditor()
+        self._nwDocument = document
+        self._nwItem = nwItem
         if not (self._nwItem and self._nwItem.itemType == nwItemType.FILE):
             logger.debug("Requested item '%s' is not a document", tHandle)
             self.clearEditor()
             return False
-
+        
         if (text := self._nwDocument.readDocument()) is None:
             # There was an I/O error
             self.clearEditor()
@@ -686,7 +707,8 @@ class GuiDocEditor(QPlainTextEdit):
 
         QApplication.processEvents()
 
-        self._applyVirtualIndentProjection()
+        if self.isNovelMode():
+            self._applyVirtualIndentProjection()
         
         self.setDocumentChanged(False)
         self._qDocument.clearUndoRedoStacks()
@@ -1197,10 +1219,16 @@ class GuiDocEditor(QPlainTextEdit):
           * We also handle automatic scrolling here.
         """
         self._lastActive = time()
-
+        shift = bool(
+           event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+        )
         
-        if CONFIG.manuscriptLayout:
-            if event.key() == Qt.Key.Key_Left:
+        if self.isManuscriptMode():
+            if event.key() == Qt.Key.Key_Left: # manuscript mode only
+                if shift: 
+                    mode = QtKeepAnchor
+                else:
+                    mode = QtMoveAnchor
                 cursor = self.textCursor()
                 block = cursor.block()
                 text = block.text()
@@ -1216,11 +1244,12 @@ class GuiDocEditor(QPlainTextEdit):
                             if prev_block.isValid():
                                 cursor.setPosition(
                                     prev_block.position()
-                                    + len(prev_block.text())
+                                    + len(prev_block.text()),
+                                    mode
                                 )
                                 self.setTextCursor(cursor)
                                 return
-            elif event.key() == Qt.Key.Key_Return:
+            elif event.key() == Qt.Key.Key_Return: # manuscript mode only
                 cursor = self.textCursor()
                 cursor.beginEditBlock()
                 cursor = self.textCursor()
@@ -1244,7 +1273,7 @@ class GuiDocEditor(QPlainTextEdit):
                         self.decodeBlock(next_block)
                 cursor.endEditBlock()
                 return
-            elif event.key() == Qt.Key.Key_Backspace:
+            elif event.key() == Qt.Key.Key_Backspace: # manuscript mode only
                 if isCursorAtIndentBoundary(self.textCursor()):
                     cursor = self.textCursor()
                     cursor.beginEditBlock()
@@ -1286,7 +1315,7 @@ class GuiDocEditor(QPlainTextEdit):
                     #cursor.setPosition(pos,QTextCursor.MoveMode.MoveAnchor)
 
                     return                  
-            elif event.key() == Qt.Key.Key_Delete:                
+            elif event.key() == Qt.Key.Key_Delete: # manuscript mode only
                 cursor = self.textCursor()
                 #cursor.insertText("!")
                 #return
@@ -1323,7 +1352,7 @@ class GuiDocEditor(QPlainTextEdit):
                         return # nothing to delete => last block                
             super().keyPressEvent(event)
             return
-
+        # end if manuscript mode
 
         if CONFIG.vimMode and self._vim.mode != nwVimMode.INSERT:
             # Process Vim modes
@@ -1549,9 +1578,11 @@ class GuiDocEditor(QPlainTextEdit):
             self._selection.cursor = self.textCursor()
             self._selection.cursor.clearSelection()
             self.setExtraSelections([self._selection])
-
-        if CONFIG.manuscriptLayout:
+        if self.isManuscriptMode():
             cursor = self.textCursor()
+            mode = QTextCursor.MoveMode.MoveAnchor
+            if cursor.hasSelection():
+                mode = QTextCursor.MoveMode.KeepAnchor
             block = cursor.block()
             text = block.text()            
             start = text.find(INDENT_BEGIN)
@@ -1561,9 +1592,11 @@ class GuiDocEditor(QPlainTextEdit):
                     pos = cursor.positionInBlock()
                     if start <= pos <= end:
                         cursor.setPosition(
-                            block.position() + end + 1
+                            block.position() + end + 1,
+                            mode
                         )
                         self.setTextCursor(cursor)
+
 
     @pyqtSlot(int, int, str)
     def _insertCompletion(self, pos: int, length: int, text: str) -> None:
